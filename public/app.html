@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Panel — CitaFlow</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230aa37f'/%3E%3Ctext x='16' y='23' font-size='20' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <nav class="nav"><div class="container">
+    <div class="logo"><span class="dot"></span> CitaFlow</div>
+    <div class="nav-links">
+      <span id="tenantName" class="hide-sm" style="font-weight:700;color:var(--ink)"></span>
+      <a id="bookLink" class="hide-sm" href="/book" target="_blank">Ver página de reservas ↗</a>
+      <a href="#" id="logout">Salir</a>
+    </div>
+  </div></nav>
+
+  <div class="container app-wrap">
+    <div>
+      <h1 id="panelTitle" style="font-size:26px;letter-spacing:-.5px">Panel del negocio</h1>
+      <p style="color:var(--muted)">Tus citas, en automático. <a href="#" id="cron" style="color:var(--brand);font-weight:600">▶ Ejecutar recordatorios ahora</a></p>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+        <span>Plan: <span id="planBadge" class="pill confirmed">—</span></span>
+        <button id="upgradeBtn" class="btn btn-primary btn-sm" style="display:none">Mejorar a Pro · S/99/mes</button>
+      </div>
+    </div>
+
+    <div class="stat-grid" id="stats"></div>
+
+    <div class="two-col">
+      <div class="panel">
+        <h2>Próximas citas</h2>
+        <div class="table-scroll"><table class="appts"><thead><tr><th>Paciente</th><th>Cuándo</th><th>Servicio</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="apptRows"></tbody></table></div>
+        <div id="empty" class="empty-state" style="display:none"><span class="ico">📅</span>Aún no hay citas.<br>Prueba el asistente para agendar la primera.</div>
+      </div>
+
+      <div>
+        <div class="panel" style="margin-bottom:24px">
+          <h2>Prueba tu asistente</h2>
+          <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Escríbele como si fueras un paciente. Las citas aparecen a la izquierda.</p>
+          <div class="chat-box" style="height:260px">
+            <div class="chat-msgs" id="msgs"></div>
+            <div class="chat-input">
+              <input id="input" placeholder="Ej: quiero una cita para limpieza" autocomplete="off" />
+              <button id="send" aria-label="Enviar">➤</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Ajustes del negocio</h2>
+          <div class="field"><label>Servicios (separados por coma)</label><input id="setServices" /></div>
+          <div class="field"><label>Dirección</label><input id="setAddress" /></div>
+          <div class="field"><label>Duración de cada cita (min)</label><input id="setSlot" type="number" min="10" step="5" /></div>
+          <div class="field"><label>Ticket promedio por cita (S/)</label><input id="setTicket" type="number" min="0" step="10" /></div>
+          <button class="btn btn-primary btn-sm" id="saveSettings">Guardar ajustes</button>
+          <span id="savedMsg" style="font-size:13px;color:var(--brand);margin-left:10px;display:none">✓ Guardado</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let slug = null;
+  const phone = "owner-test";
+  const msgs = document.getElementById("msgs");
+  const input = document.getElementById("input");
+
+  async function ensureAuth(){
+    const r = await fetch("/api/auth/me");
+    if(!r.ok){ location.href = "/login"; return false; }
+    const me = await r.json();
+    slug = me.tenant.slug;
+    document.getElementById("tenantName").textContent = me.tenant.name;
+    document.getElementById("panelTitle").textContent = me.tenant.name;
+    document.getElementById("bookLink").href = "/book?t=" + slug;
+    return true;
+  }
+
+  async function load(){
+    renderStats(await (await fetch(`/api/admin/${slug}/stats`)).json());
+    renderAppts((await (await fetch(`/api/admin/${slug}/appointments`)).json()).appointments);
+    const t = await (await fetch(`/api/tenants/${slug}`)).json();
+    document.getElementById("setServices").value = (t.services||[]).join(", ");
+    document.getElementById("setAddress").value = t.address || "";
+    document.getElementById("setSlot").value = t.slot_minutes || 30;
+    document.getElementById("setTicket").value = t.avg_ticket || 80;
+    const plan = t.plan || "trial";
+    const badge = document.getElementById("planBadge");
+    badge.textContent = plan.charAt(0).toUpperCase() + plan.slice(1);
+    badge.className = "pill " + (plan === "pro" || plan === "premium" ? "done" : "confirmed");
+    document.getElementById("upgradeBtn").style.display = (plan === "pro" || plan === "premium") ? "none" : "inline-flex";
+  }
+
+  document.getElementById("upgradeBtn").onclick = async (e)=>{
+    const btn = e.target; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Procesando';
+    try{
+      const r = await fetch(`/api/admin/${slug}/upgrade`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan:"pro"})});
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error);
+      toast(d.simulated ? "Plan Pro activado (modo prueba)" : "¡Bienvenido a Pro! 🎉");
+      await load();
+    }catch(err){ toast("No se pudo procesar el pago: "+err.message,"err"); btn.disabled=false; btn.textContent="Mejorar a Pro · S/99/mes"; }
+  };
+
+  document.getElementById("saveSettings").onclick = async (e)=>{
+    const btn = e.target; const original = btn.textContent;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Guardando';
+    const body = {
+      services: document.getElementById("setServices").value.split(",").map(s=>s.trim()).filter(Boolean),
+      address: document.getElementById("setAddress").value,
+      slot_minutes: parseInt(document.getElementById("setSlot").value) || 30,
+      avg_ticket: parseInt(document.getElementById("setTicket").value) || 0,
+    };
+    try{
+      const r = await fetch(`/api/admin/${slug}/settings`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      if(!r.ok) throw new Error();
+      toast("Ajustes guardados"); await load();
+    }catch{ toast("No se pudo guardar","err"); }
+    btn.disabled = false; btn.textContent = original;
+  };
+
+  function renderStats(s){
+    const cards = [
+      {n:"S/ "+(s.pipelineValue||0).toLocaleString("es-PE"), l:"Valor en agenda"},
+      {n:`${s.confirmadas||0}/${s.upcoming||0}`, l:"Confirmadas por el paciente"},
+      {n:s.sinConfirmar||0, l:"Sin confirmar (riesgo)"},
+      {n:s.noShowRate==null?"—":s.noShowRate+"%", l:"Inasistencia"},
+    ];
+    document.getElementById("stats").innerHTML = cards.map(c=>`<div class="stat"><div class="n">${c.n}</div><div class="l">${c.l}</div></div>`).join("");
+  }
+
+  const fmt = iso => new Date(iso).toLocaleString("es-PE",{weekday:"short",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"});
+
+  function renderAppts(list){
+    const up = list.filter(a=>a.status!=="cancelled");
+    document.getElementById("empty").style.display = up.length? "none":"block";
+    const estadoLabel = {confirmed:"agendada", done:"completada", no_show:"no asistió", cancelled:"cancelada"};
+    document.getElementById("apptRows").innerHTML = up.map(a=>`
+      <tr>
+        <td><b>${a.patient_name}</b></td>
+        <td>${fmt(a.starts_at)}</td>
+        <td>${a.service||"—"}</td>
+        <td>
+          <span class="pill ${a.status}">${estadoLabel[a.status]||a.status}</span>
+          ${a.status==="confirmed"?(a.patient_confirmed?`<span class="pill done" title="El paciente confirmó por WhatsApp">✓ confirmó</span>`:`<span class="pill" style="background:#fff4e5;color:#b5710f" title="Aún no confirma">⏳ sin confirmar</span>`):""}
+        </td>
+        <td style="text-align:right;white-space:nowrap">
+          ${a.status==="confirmed"?`<button class="btn btn-ghost btn-sm" onclick="setStatus('${a.id}','done')">✓ vino</button>
+          <button class="btn btn-ghost btn-sm" onclick="setStatus('${a.id}','no_show')">✗ no vino</button>
+          <button class="btn btn-ghost btn-sm" onclick="setStatus('${a.id}','cancelled')" title="Cancelar">✕</button>`:""}
+        </td>
+      </tr>`).join("");
+  }
+
+  window.setStatus = async (id,status)=>{
+    await fetch(`/api/admin/${slug}/appointments/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});
+    load();
+  };
+
+  function toast(msg, type="ok"){
+    let wrap = document.getElementById("toasts");
+    if(!wrap){ wrap=document.createElement("div"); wrap.className="toast-wrap"; wrap.id="toasts"; document.body.appendChild(wrap); }
+    const t=document.createElement("div"); t.className="toast "+type;
+    t.innerHTML=(type==="ok"?"✅ ":"⚠️ ")+msg; wrap.appendChild(t);
+    setTimeout(()=>{ t.style.opacity="0"; t.style.transition="opacity .3s"; setTimeout(()=>t.remove(),300); }, 3200);
+  }
+
+  document.getElementById("cron").onclick = async (e)=>{
+    e.preventDefault();
+    const {sent} = await (await fetch(`/api/cron/reminders`,{method:"POST"})).json();
+    toast(sent.length? `Recordatorios enviados: ${sent.length}` : "No hay citas para recordar (las de mañana).", sent.length?"ok":"err");
+    load();
+  };
+
+  function bubble(text,who){const d=document.createElement("div");d.className="msg "+(who==="me"?"out":"in");d.textContent=text;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
+  async function sendMsg(text){
+    if(!text.trim())return; bubble(text,"me"); input.value="";
+    const {reply}=await (await fetch(`/api/chat/${slug}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,message:text})})).json();
+    bubble(reply,"bot"); load();
+  }
+  document.getElementById("send").onclick=()=>sendMsg(input.value);
+  input.addEventListener("keydown",e=>{if(e.key==="Enter")sendMsg(input.value);});
+
+  document.getElementById("logout").onclick = async (e)=>{ e.preventDefault(); await fetch("/api/auth/logout",{method:"POST"}); location.href="/login"; };
+
+  bubble("Hola 👋 Soy tu asistente. Pídeme una cita para ver cómo agendo sola.","bot");
+  (async ()=>{ if (await ensureAuth()) load(); })();
+</script>
+</body>
+</html>

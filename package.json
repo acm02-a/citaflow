@@ -1,0 +1,16 @@
+{
+  "name": "citaflow",
+  "version": "0.1.0",
+  "description": "Agendamiento por WhatsApp con IA para PYMEs de LatAm. Menos inasistencias, cero mensajes perdidos.",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "seed": "node --env-file-if-exists=.env src/seed.mjs",
+    "demo": "node test/sim.mjs"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2"
+  }
+}

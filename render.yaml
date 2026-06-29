@@ -1,0 +1,24 @@
+# Deploy en Render (render.com) con un clic desde el repo.
+# Crea un disco persistente para /app/data (la base JSON del MVP).
+services:
+  - type: web
+    name: citaflow
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: node server.mjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SEED_DEMO
+        value: "false"
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: GROQ_API_KEY
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+    disk:
+      name: citaflow-data
+      mountPath: /app/data
+      sizeGB: 1

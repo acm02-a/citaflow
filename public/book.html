@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reservar cita — CitaFlow</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230aa37f'/%3E%3Ctext x='16' y='23' font-size='20' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <nav class="nav"><div class="container">
+    <div class="logo"><span class="dot"></span> CitaFlow</div>
+    <a class="nav-links" href="/">← Inicio</a>
+  </div></nav>
+
+  <div class="container" style="max-width:560px;padding:40px 24px">
+    <h1 id="title" style="font-size:28px;letter-spacing:-.5px">Reserva tu cita</h1>
+    <p id="sub" style="color:var(--muted);margin:6px 0 20px">Cargando…</p>
+
+    <div class="chat-box" style="height:60vh;min-height:360px">
+      <div class="chat-msgs" id="msgs"></div>
+      <div class="chat-input">
+        <input id="input" placeholder="Escribe como en WhatsApp…" autocomplete="off" />
+        <button id="send" aria-label="Enviar">➤</button>
+      </div>
+    </div>
+
+    <div id="quick" class="chips"></div>
+    <p style="color:var(--muted);font-size:12px;margin-top:16px">Demo de CitaFlow. En producción, esta misma conversación ocurre dentro del WhatsApp del negocio.</p>
+  </div>
+
+<script>
+  const slug = new URLSearchParams(location.search).get("t") || "clinica-sonrisa";
+  const phone = "web-" + Math.random().toString(36).slice(2, 8);
+  const msgs = document.getElementById("msgs");
+  const input = document.getElementById("input");
+
+  function bubble(text, who){
+    const d = document.createElement("div");
+    d.className = "msg " + (who === "me" ? "out" : "in");
+    d.textContent = text;
+    msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  async function init(){
+    const r = await fetch(`/api/tenants/${slug}`);
+    if(!r.ok){ document.getElementById("sub").textContent = "Negocio no encontrado."; return; }
+    const t = await r.json();
+    document.getElementById("title").textContent = t.name;
+    document.getElementById("sub").textContent = (t.address || "") + " · " + (t.services||[]).join(" · ");
+    bubble(`¡Hola! Soy el asistente de ${t.name}. ¿Te ayudo a agendar una cita? 🌿`, "bot");
+    loadQuick();
+  }
+
+  async function loadQuick(){
+    const r = await fetch(`/api/tenants/${slug}/slots`);
+    const {slots} = await r.json();
+    const q = document.getElementById("quick");
+    q.innerHTML = "<span style='font-size:12px;color:var(--muted);width:100%'>Toca un cupo o escribe:</span>";
+    slots.slice(0,4).forEach(s=>{
+      const b = document.createElement("button");
+      b.className = "chip"; b.textContent = s.label;
+      b.onclick = ()=> sendMsg("Quiero el " + s.label);
+      q.appendChild(b);
+    });
+  }
+
+  async function sendMsg(text){
+    if(!text.trim()) return;
+    bubble(text, "me"); input.value = "";
+    const r = await fetch(`/api/chat/${slug}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({phone, message:text})
+    });
+    const {reply} = await r.json();
+    bubble(reply, "bot");
+  }
+
+  document.getElementById("send").onclick = ()=> sendMsg(input.value);
+  input.addEventListener("keydown", e=>{ if(e.key==="Enter") sendMsg(input.value); });
+  init();
+</script>
+</body>
+</html>

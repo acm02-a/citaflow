@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Entrar — CitaFlow</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230aa37f'/%3E%3Ctext x='16' y='23' font-size='20' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <nav class="nav"><div class="container">
+    <a class="logo" href="/"><span class="dot"></span> CitaFlow</a>
+  </div></nav>
+
+  <div class="container" style="max-width:440px;padding:48px 24px">
+    <div class="panel">
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <button class="btn btn-ghost btn-sm" id="tabLogin" style="flex:1">Entrar</button>
+        <button class="btn btn-ghost btn-sm" id="tabSignup" style="flex:1">Crear cuenta</button>
+      </div>
+
+      <!-- Login -->
+      <form id="formLogin">
+        <div class="field"><label>Email</label><input type="email" id="lEmail" value="demo@citaflow.app" required></div>
+        <div class="field"><label>Contraseña</label><input type="password" id="lPass" value="demo1234" required></div>
+        <button class="btn btn-primary" style="width:100%" type="submit">Entrar</button>
+        <p style="font-size:12px;color:var(--muted);margin-top:10px">Cuenta demo precargada — solo dale Entrar.</p>
+      </form>
+
+      <!-- Signup -->
+      <form id="formSignup" style="display:none">
+        <div class="field"><label>Nombre del negocio</label><input id="sName" placeholder="Clínica Dental Lima" required></div>
+        <div class="field"><label>Servicios (separados por coma)</label><input id="sServices" placeholder="limpieza dental, ortodoncia"></div>
+        <div class="field"><label>Email</label><input type="email" id="sEmail" required></div>
+        <div class="field"><label>Contraseña (mín 6)</label><input type="password" id="sPass" required></div>
+        <button class="btn btn-primary" style="width:100%" type="submit">Crear mi CitaFlow</button>
+      </form>
+
+      <p id="err" style="color:var(--danger);font-size:13px;margin-top:12px;display:none"></p>
+    </div>
+  </div>
+
+<script>
+  const show = (id)=>{ document.getElementById("err").style.display="none";
+    document.getElementById("formLogin").style.display = id==="login"?"block":"none";
+    document.getElementById("formSignup").style.display = id==="signup"?"block":"none"; };
+  document.getElementById("tabLogin").onclick=()=>show("login");
+  document.getElementById("tabSignup").onclick=()=>show("signup");
+  const err=(m)=>{const e=document.getElementById("err");e.textContent=m;e.style.display="block";};
+
+  document.getElementById("formLogin").onsubmit = async (e)=>{
+    e.preventDefault();
+    const r = await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email:lEmail.value,password:lPass.value})});
+    if(r.ok) location.href="/app"; else err((await r.json()).error);
+  };
+  document.getElementById("formSignup").onsubmit = async (e)=>{
+    e.preventDefault();
+    const services = sServices.value.split(",").map(s=>s.trim()).filter(Boolean);
+    const r = await fetch("/api/auth/signup",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({businessName:sName.value,services,email:sEmail.value,password:sPass.value})});
+    if(r.ok) location.href="/app"; else err((await r.json()).error);
+  };
+</script>
+</body>
+</html>
