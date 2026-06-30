@@ -6,6 +6,7 @@
 <title>Panel — CitaRA</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230aa37f'/%3E%3Ctext x='16' y='23' font-size='20' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css" />
+<script src="https://checkout.culqi.com/js/v4"></script>
 </head>
 <body>
   <nav class="nav"><div class="container">
@@ -65,6 +66,9 @@
 
 <script>
   let slug = null;
+  let culqiPublicKey = null;
+  let pendingPlan = null;
+  const PLAN_AMOUNTS = {pro: {amount: 9900, label: "S/99/mes"}, premium: {amount: 19900, label: "S/199/mes"}};
   const phone = "owner-test";
   const msgs = document.getElementById("msgs");
   const input = document.getElementById("input");
@@ -95,15 +99,43 @@
     document.getElementById("upgradeBtn").style.display = (plan === "pro" || plan === "premium") ? "none" : "inline-flex";
   }
 
-  document.getElementById("upgradeBtn").onclick = async (e)=>{
-    const btn = e.target; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Procesando';
+  async function doUpgrade(plan, token){
+    const btn = document.getElementById("upgradeBtn");
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Procesando';
     try{
-      const r = await fetch(`/api/admin/${slug}/upgrade`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan:"pro"})});
+      const r = await fetch(`/api/admin/${slug}/upgrade`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan, token})});
       const d = await r.json();
       if(!r.ok) throw new Error(d.error);
       toast(d.simulated ? "Plan Pro activado (modo prueba)" : "¡Bienvenido a Pro! 🎉");
       await load();
-    }catch(err){ toast("No se pudo procesar el pago: "+err.message,"err"); btn.disabled=false; btn.textContent="Mejorar a Pro · S/99/mes"; }
+    }catch(err){
+      toast("No se pudo procesar el pago: "+err.message,"err");
+      btn.disabled = false; btn.textContent = "Mejorar a Pro · S/99/mes";
+    }
+  }
+
+  // Callback global que invoca Culqi Checkout cuando el usuario tokeniza su tarjeta.
+  window.culqi = function(){
+    if (window.Culqi && Culqi.token) {
+      doUpgrade(pendingPlan, Culqi.token.id);
+    } else if (window.Culqi && Culqi.error) {
+      toast("Pago cancelado o rechazado: " + (Culqi.error.user_message || Culqi.error.merchant_message || "intenta de nuevo"), "err");
+      const btn = document.getElementById("upgradeBtn");
+      btn.disabled = false; btn.textContent = "Mejorar a Pro · S/99/mes";
+    }
+  };
+
+  document.getElementById("upgradeBtn").onclick = async (e)=>{
+    pendingPlan = "pro";
+    if (!culqiPublicKey) {
+      // Sin llave pública configurada (dev/local): el backend simula el cobro.
+      return doUpgrade(pendingPlan, null);
+    }
+    const plan = PLAN_AMOUNTS[pendingPlan];
+    Culqi.publicKey = culqiPublicKey;
+    Culqi.settings({title: "CitaRA", currency: "PEN", amount: plan.amount});
+    Culqi.options({lang: "auto", installments: false, paymentMethods: {tarjeta: true, yape: true, billetera: false, bancaMovil: false, agente: false, cuotealo: false}});
+    Culqi.open();
   };
 
   document.getElementById("saveSettings").onclick = async (e)=>{
@@ -188,7 +220,10 @@
   document.getElementById("logout").onclick = async (e)=>{ e.preventDefault(); await fetch("/api/auth/logout",{method:"POST"}); location.href="/login"; };
 
   bubble("Hola 👋 Soy tu asistente. Pídeme una cita para ver cómo agendo sola.","bot");
-  (async ()=>{ if (await ensureAuth()) load(); })();
+  (async ()=>{
+    try{ culqiPublicKey = (await (await fetch("/api/config")).json()).culqiPublicKey; }catch{}
+    if (await ensureAuth()) load();
+  })();
 </script>
 </body>
 </html>

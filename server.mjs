@@ -238,6 +238,10 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // ---------- config pública (claves no sensibles para el frontend) ----------
+    if (method === "GET" && url.pathname === "/api/config")
+      return json(res, 200, {culqiPublicKey: process.env.CULQI_PUBLIC_KEY || null});
+
     // ---------- cron de recordatorios ----------
     if (parts[0] === "api" && parts[1] === "cron" && parts[2] === "reminders" && method === "POST") {
       const sent = await runReminders();
