@@ -54,7 +54,12 @@ docker build -t citaflow . && docker restart citaflow
 1. **WhatsApp**: número de WhatsApp Business verificado + token permanente, y
    apuntar el webhook de Meta a `https://citas.tudominio.com/webhook/whatsapp`.
    Vincular el `whatsapp_phone_id` de cada negocio en su alta.
-2. **Pagos**: poner `CULQI_PUBLIC_KEY` y `CULQI_SECRET_KEY` reales en `.env`.
+2. **Pagos**: el checkout de Culqi ya está integrado en el código (modal de
+   Culqi.js en el dashboard, tokeniza la tarjeta antes de cobrar). Solo falta:
+   abrir cuenta en [culqi.com](https://culqi.com), copiar `pk_live_...` y
+   `sk_live_...`, y pegarlas como `CULQI_PUBLIC_KEY`/`CULQI_SECRET_KEY` (en
+   Render: Environment del servicio; en VPS: el `.env`). Sin esas llaves, el
+   botón "Mejorar a Pro" sigue en modo simulado — no cobra de verdad.
 
 ## Checklist pre-lanzamiento
 - [ ] Secretos solo en `.env` del VPS (nunca en git ni en la imagen).
