@@ -22,6 +22,10 @@ services:
         sync: false
       - key: WHATSAPP_TOKEN
         sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
       - key: CULQI_PUBLIC_KEY
         sync: false
       - key: CULQI_SECRET_KEY

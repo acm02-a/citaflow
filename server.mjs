@@ -9,6 +9,7 @@ import {readFile} from "node:fs/promises";
 import {existsSync} from "node:fs";
 import {join, dirname, extname} from "node:path";
 import {fileURLToPath} from "node:url";
+import {createHmac, timingSafeEqual} from "node:crypto";
 
 import * as store from "./src/db-store.mjs";
 import * as auth from "./src/auth.mjs";
@@ -74,14 +75,39 @@ function rateLimited(req, max = 10, windowMs = 60000) {
   return rec.count > max;
 }
 
-const readBody = (req) =>
+const readRawBody = (req) =>
   new Promise((resolve) => {
     let d = "";
     req.on("data", (c) => (d += c));
-    req.on("end", () => {
-      try { resolve(d ? JSON.parse(d) : {}); } catch { resolve({}); }
-    });
+    req.on("end", () => resolve(d));
   });
+
+const readBody = async (req) => {
+  const raw = await readRawBody(req);
+  try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+};
+
+// Verifica que el POST realmente venga de Meta (HMAC-SHA256 con el App Secret
+// sobre el body crudo). Sin WHATSAPP_APP_SECRET configurado, deja pasar (dev)
+// pero avisa una vez — cualquiera podría falsificar mensajes de WhatsApp si
+// esto se queda así en producción.
+let warnedNoAppSecret = false;
+function verifyMetaSignature(raw, signatureHeader) {
+  const secret = process.env.WHATSAPP_APP_SECRET;
+  if (!secret) {
+    if (!warnedNoAppSecret) {
+      console.warn("⚠️  WHATSAPP_APP_SECRET no configurado: el webhook de WhatsApp NO valida la firma de Meta. Configúralo antes de ir a producción.");
+      warnedNoAppSecret = true;
+    }
+    return true;
+  }
+  if (!signatureHeader || !signatureHeader.startsWith("sha256=")) return false;
+  const expected = createHmac("sha256", secret).update(raw).digest("hex");
+  const given = signatureHeader.slice(7);
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(given, "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 async function slotsFor(tenant) {
   const appts = (await store.listAppointments(tenant.id)).filter((a) => a.status !== "cancelled");
@@ -250,12 +276,19 @@ const server = createServer(async (req, res) => {
 
     // ---------- webhook de WhatsApp (Meta) ----------
     if (parts[0] === "webhook" && parts[1] === "whatsapp") {
-      if (method === "GET") { // verificación de Meta
+      if (method === "GET") { // verificación de Meta (handshake inicial)
+        const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+        const tokenOk = !verifyToken || url.searchParams.get("hub.verify_token") === verifyToken;
+        if (!tokenOk) return json(res, 403, {error: "verify_token inválido"});
         const challenge = url.searchParams.get("hub.challenge");
         return res.end(challenge || "ok");
       }
       if (method === "POST") {
-        const body = await readBody(req);
+        const raw = await readRawBody(req);
+        if (!verifyMetaSignature(raw, req.headers["x-hub-signature-256"]))
+          return json(res, 401, {error: "firma inválida"});
+        let body = {};
+        try { body = raw ? JSON.parse(raw) : {}; } catch { /* body inválido, se ignora abajo */ }
         await handleWhatsAppWebhook(body);
         return json(res, 200, {received: true});
       }
