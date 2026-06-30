@@ -1,5 +1,5 @@
 /* -------------------------------------------------------------------------- */
-/*  CitaFlow — servidor (cero dependencias, node:http).                         */
+/*  CitaRA — servidor (cero dependencias, node:http).                         */
 /*  Sirve: landing, dashboard, widget de reservas, API y webhook de WhatsApp.   */
 /*  Arranca con:  node server.mjs   (siembra una clínica demo automáticamente). */
 /* -------------------------------------------------------------------------- */
@@ -357,7 +357,7 @@ setInterval(() => {
 }, REMINDER_EVERY_MS);
 
 server.listen(PORT, () => {
-  console.log(`\n🗓️  CitaFlow corriendo en http://localhost:${PORT}`);
+  console.log(`\n🗓️  CitaRA corriendo en http://localhost:${PORT}`);
   console.log(`   Landing:   http://localhost:${PORT}/`);
   console.log(`   Dashboard: http://localhost:${PORT}/app`);
   console.log(`   Reservar:  http://localhost:${PORT}/book?t=clinica-sonrisa`);
